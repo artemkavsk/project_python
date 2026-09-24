@@ -1,0 +1,48 @@
+\chapter{Engineering Storage Bot }
+\hypertarget{md__r_e_a_d_m_e}{}\label{md__r_e_a_d_m_e}\index{Engineering Storage Bot@{Engineering Storage Bot}}
+\label{md__r_e_a_d_m_e_autotoc_md0}%
+\Hypertarget{md__r_e_a_d_m_e_autotoc_md0}%
+
+
+Telegram-\/бот для небольших инженерных проектов.
+
+Функции:
+\begin{DoxyItemize}
+\item несколько проектов на пользователя;
+\item произвольное дерево папок;
+\item загрузка файлов;
+\item автоматическая история версий файла по имени;
+\item получение любой старой версии;
+\item комментарий и масса для каждой версии;
+\item количество экземпляров;
+\item компоненты без файлов;
+\item записки;
+\item рекурсивный подсчёт массы папки и проекта;
+\item необязательный лимит массы проекта.
+\end{DoxyItemize}\hypertarget{md__r_e_a_d_m_e_autotoc_md1}{}\doxysection{\texorpdfstring{Запуск}{Запуск}}\label{md__r_e_a_d_m_e_autotoc_md1}
+
+\begin{DoxyEnumerate}
+\item Установите Python 3.\+12+.
+\item Создайте Telegram-\/бота через @\+Bot\+Father и получите token.
+\item Откройте терминал в папке проекта.
+\item Создайте виртуальное окружение:
+\end{DoxyEnumerate}
+
+Windows: python -\/m venv .venv .venv\textbackslash{}\+Scripts\textbackslash{}activate
+
+mac\+OS/\+\+Linux: python3 -\/m venv .venv source .venv/\+bin/\+activate
+
+
+\begin{DoxyEnumerate}
+\item Установите зависимости: pip install -\/r requirements.\+txt
+\item Скопируйте {\ttfamily .env.\+example} в {\ttfamily .env} и вставьте токен: BOT\+\_\+\+TOKEN=123456:ABC...
+\item Запустите: python bot.\+py
+\item Откройте бота и отправьте {\ttfamily /\+start}.
+\end{DoxyEnumerate}
+
+SQLite-\/файл создаётся автоматически.\hypertarget{md__r_e_a_d_m_e_autotoc_md2}{}\doxysection{\texorpdfstring{Важное про файлы}{Важное про файлы}}\label{md__r_e_a_d_m_e_autotoc_md2}
+Приложение хранит Telegram {\ttfamily file\+\_\+id}, а не копию файла на локальном диске. Это удобно для MVP: старую версию бот повторно отправляет через Telegram.\hypertarget{md__r_e_a_d_m_e_autotoc_md3}{}\doxysection{\texorpdfstring{Поведение версий}{Поведение версий}}\label{md__r_e_a_d_m_e_autotoc_md3}
+Если в выбранной папке уже есть файл с тем же именем, новая загрузка автоматически считается следующей версией этого логического файла.
+
+Для принудительного добавления версии можно открыть файл и нажать «Новая версия».\hypertarget{md__r_e_a_d_m_e_autotoc_md4}{}\doxysection{\texorpdfstring{Модель детали}{Модель детали}}\label{md__r_e_a_d_m_e_autotoc_md4}
+В текущей версии отдельная кнопка добавления файла убрана. В папке используется одна кнопка {\ttfamily 🔩 + Деталь}. При создании детали задаются название, масса и количество, затем бот предлагает {\ttfamily 📎 Приложить файл} или {\ttfamily — Без файла}. Если файл приложен, следующие загрузки через карточку детали сохраняются как v2, v3 и т.\+д.; любую версию можно скачать. 
