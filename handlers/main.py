@@ -3,7 +3,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from database.repositories import Repository
-from keyboards.inline import projects_kb, folder_kb, file_kb, component_kb, note_kb, confirm_kb
+from keyboards.inline import projects_kb, folder_kb, file_kb, component_kb, component_file_choice_kb, note_kb, confirm_kb
 from services.weight import folder_mass, fmt_mass
 from services.navigation import folder_path
 
@@ -26,6 +26,8 @@ class Form(StatesGroup):
     file_mass = State()
     file_comment = State()
     file_qty = State()
+    component_waiting_file = State()
+    component_file_comment = State()
 
 async def edit_or_answer(event, text, markup=None):
     if isinstance(event, CallbackQuery):
@@ -224,8 +226,14 @@ async def component_qty_value(m: Message, state: FSMContext):
     cid = d["component_id"]
     c = await repo.get_component(cid)
     await repo.update_component(cid, quantity=q)
+    if d.get("editing_component_qty"):
+        await state.clear()
+        return await show_folder(m, c["folder_id"], m.from_user.id)
     await state.clear()
-    await show_folder(m, c["folder_id"], m.from_user.id)
+    await m.answer(
+        "Приложить файл к детали? Если файла нет, выберите «— Без файла».",
+        reply_markup=component_file_choice_kb(cid)
+    )
 
 @router.callback_query(F.data.startswith("component:"))
 async def component_open(c: CallbackQuery):
@@ -233,9 +241,15 @@ async def component_open(c: CallbackQuery):
     if not await repo.component_owned(cid, c.from_user.id): return await c.answer("Нет доступа", show_alert=True)
     x = await repo.get_component(cid)
     total = (x["mass_g"] or 0) * x["quantity"] if x["mass_g"] is not None else None
-    text = f"⚙️ {x['name']}\n\nМасса: {fmt_mass(x['mass_g'])}\nКоличество: {x['quantity']}"
+    versions = await repo.list_component_file_versions(cid)
+    text = f"🔩 {x['name']}\n\nМасса: {fmt_mass(x['mass_g'])}\nКоличество: {x['quantity']}"
     if total is not None: text += f"\nВсего: {fmt_mass(total)}"
-    await edit_or_answer(c, text, component_kb(cid, x["folder_id"]))
+    if versions:
+        text += f"\n\nФайл: {versions[0]['file_name']} · v{versions[0]['version_number']}"
+        text += f"\nВерсий: {len(versions)}"
+    else:
+        text += "\n\nФайл: —"
+    await edit_or_answer(c, text, component_kb(cid, x["folder_id"], versions))
 
 @router.callback_query(F.data.startswith("component_mass:"))
 async def component_mass(c: CallbackQuery, state: FSMContext):
@@ -248,7 +262,7 @@ async def component_mass(c: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("component_qty:"))
 async def component_qty(c: CallbackQuery, state: FSMContext):
     cid = int(c.data.split(":")[1])
-    await state.update_data(component_id=cid)
+    await state.update_data(component_id=cid, editing_component_qty=True)
     await state.set_state(Form.component_qty)
     await c.message.answer("Новое количество:")
     await c.answer()
@@ -264,7 +278,7 @@ async def component_name(c: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("component_deleteask:"))
 async def component_deleteask(c: CallbackQuery):
     cid = int(c.data.split(":")[1])
-    await edit_or_answer(c, "Удалить компонент?", confirm_kb(f"component_delete:{cid}", f"component:{cid}"))
+    await edit_or_answer(c, "Удалить деталь и все версии её файла?", confirm_kb(f"component_delete:{cid}", f"component:{cid}"))
 
 @router.callback_query(F.data.startswith("component_delete:"))
 async def component_delete(c: CallbackQuery):
@@ -272,6 +286,72 @@ async def component_delete(c: CallbackQuery):
     x = await repo.get_component(cid)
     await repo.delete_component(cid)
     await show_folder(c, x["folder_id"], c.from_user.id)
+
+@router.callback_query(F.data.startswith("component_nofile:"))
+async def component_nofile(c: CallbackQuery, state: FSMContext):
+    cid = int(c.data.split(":")[1])
+    if not await repo.component_owned(cid, c.from_user.id):
+        return await c.answer("Нет доступа", show_alert=True)
+    x = await repo.get_component(cid)
+    await state.clear()
+    await show_folder(c, x["folder_id"], c.from_user.id)
+
+@router.callback_query(F.data.startswith("component_attach:"))
+async def component_attach(c: CallbackQuery, state: FSMContext):
+    cid = int(c.data.split(":")[1])
+    if not await repo.component_owned(cid, c.from_user.id):
+        return await c.answer("Нет доступа", show_alert=True)
+    await state.update_data(component_id=cid)
+    await state.set_state(Form.component_waiting_file)
+    await c.message.answer("Отправьте файл детали как документ.")
+    await c.answer()
+
+@router.message(Form.component_waiting_file, F.document)
+async def component_receive_file(m: Message, state: FSMContext):
+    d = await state.get_data()
+    doc = m.document
+    await state.update_data(
+        component_file_name=doc.file_name,
+        component_tg_file_id=doc.file_id,
+        component_unique_id=doc.file_unique_id,
+        component_file_size=doc.file_size,
+    )
+    await state.set_state(Form.component_file_comment)
+    await m.answer("Комментарий к этой версии? Отправьте «-», если не нужен.")
+
+@router.message(Form.component_waiting_file)
+async def component_receive_not_file(m: Message):
+    await m.answer("Нужно отправить именно файл/документ.")
+
+@router.message(Form.component_file_comment)
+async def component_file_comment(m: Message, state: FSMContext):
+    d = await state.get_data()
+    comment = (m.text or "").strip()
+    if comment == "-":
+        comment = None
+    _, version = await repo.add_component_file_version(
+        d["component_id"], d["component_file_name"], d["component_tg_file_id"],
+        d["component_unique_id"], d["component_file_size"], comment
+    )
+    x = await repo.get_component(d["component_id"])
+    await state.clear()
+    await m.answer(f"Файл сохранён как v{version} детали «{x['name']}».")
+    await show_folder(m, x["folder_id"], m.from_user.id)
+
+@router.callback_query(F.data.startswith("component_version_send:"))
+async def component_version_send(c: CallbackQuery):
+    vid = int(c.data.split(":")[1])
+    v = await repo.get_component_file_version(vid)
+    if not v:
+        return await c.answer("Версия не найдена", show_alert=True)
+    x = await repo.get_component(v["component_id"])
+    if not await repo.component_owned(x["id"], c.from_user.id):
+        return await c.answer("Нет доступа", show_alert=True)
+    caption = f"{x['name']} · v{v['version_number']}"
+    if v["comment"]:
+        caption += f"\n{v['comment']}"
+    await c.message.answer_document(v["telegram_file_id"], caption=caption)
+    await c.answer()
 
 @router.callback_query(F.data.startswith("note_new:"))
 async def note_new(c: CallbackQuery, state: FSMContext):

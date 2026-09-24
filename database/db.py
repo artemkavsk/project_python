@@ -62,6 +62,20 @@ CREATE TABLE IF NOT EXISTS components (
     FOREIGN KEY(folder_id) REFERENCES folders(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS component_file_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    component_id INTEGER NOT NULL,
+    version_number INTEGER NOT NULL,
+    file_name TEXT NOT NULL,
+    telegram_file_id TEXT NOT NULL,
+    telegram_file_unique_id TEXT,
+    size INTEGER,
+    comment TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(component_id, version_number),
+    FOREIGN KEY(component_id) REFERENCES components(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS notes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     folder_id INTEGER NOT NULL,
@@ -77,6 +91,7 @@ CREATE INDEX IF NOT EXISTS idx_files_folder ON files(folder_id);
 CREATE INDEX IF NOT EXISTS idx_versions_file ON file_versions(file_id);
 CREATE INDEX IF NOT EXISTS idx_components_folder ON components(folder_id);
 CREATE INDEX IF NOT EXISTS idx_notes_folder ON notes(folder_id);
+CREATE INDEX IF NOT EXISTS idx_component_versions_component ON component_file_versions(component_id);
 """
 
 class Database:

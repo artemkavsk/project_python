@@ -187,6 +187,28 @@ class Repository:
     async def delete_component(self, component_id: int):
         await self._execute("DELETE FROM components WHERE id=?", (component_id,))
 
+    async def add_component_file_version(self, component_id: int, file_name: str, tg_file_id: str, unique_id: str, size: int | None, comment=None):
+        row = await self._fetchone(
+            "SELECT COALESCE(MAX(version_number),0)+1 n FROM component_file_versions WHERE component_id=?",
+            (component_id,)
+        )
+        n = row["n"]
+        vid = await self._execute(
+            """INSERT INTO component_file_versions(component_id,version_number,file_name,telegram_file_id,telegram_file_unique_id,size,comment)
+               VALUES(?,?,?,?,?,?,?)""",
+            (component_id, n, file_name, tg_file_id, unique_id, size, comment)
+        )
+        return vid, n
+
+    async def list_component_file_versions(self, component_id: int):
+        return await self._fetchall(
+            "SELECT * FROM component_file_versions WHERE component_id=? ORDER BY version_number DESC",
+            (component_id,)
+        )
+
+    async def get_component_file_version(self, version_id: int):
+        return await self._fetchone("SELECT * FROM component_file_versions WHERE id=?", (version_id,))
+
     async def create_note(self, folder_id: int, telegram_id: int, text: str) -> int:
         uid = await self.ensure_user(telegram_id)
         return await self._execute("INSERT INTO notes(folder_id,author_id,text) VALUES(?,?,?)", (folder_id, uid, text))
