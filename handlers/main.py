@@ -173,6 +173,15 @@ async def folder_delete(c: CallbackQuery):
     await repo.delete_folder(fid)
     await show_folder(c, parent, c.from_user.id)
 
+## @brief Начинает процесс создания новой детали.
+#
+#  @param c Callback-запрос от Telegram.
+#  @param state Текущее FSM-состояние пользователя.
+#
+#  @details
+#  Функция получает идентификатор текущей папки,
+#  сохраняет его в FSM и переводит пользователя
+#  к этапу ввода названия детали.
 @router.callback_query(F.data.startswith("component_new:"))
 async def component_new(c: CallbackQuery, state: FSMContext):
     folder_id = int(c.data.split(":")[1])
@@ -197,7 +206,15 @@ async def component_name_value(m: Message, state: FSMContext):
         await repo.update_component(cid, name=name)
         await state.clear()
         await show_folder(m, c["folder_id"], m.from_user.id)
-
+## @brief Обрабатывает введённую пользователем массу детали.
+#
+#  @param m Сообщение Telegram с введённым значением массы.
+#  @param state Текущее FSM-состояние пользователя.
+#
+#  @details
+#  Функция преобразует введённое значение в число,
+#  проверяет корректность и сохраняет массу детали.
+#  При некорректном вводе пользователю выводится сообщение об ошибке.
 @router.message(Form.component_mass)
 async def component_mass_value(m: Message, state: FSMContext):
     try:
