@@ -20,6 +20,7 @@ async def main_run():
     dp.include_router(main.router)
 
     print("Bot started. Press Ctrl+C to stop.")
+    await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
